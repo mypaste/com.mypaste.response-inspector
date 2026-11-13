@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="color-scheme" content="light dark">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>响应头与证书</title>
+<style>
+  :root {
+    color-scheme: light;
+    /*
+     * The host's resolved tokens arrive as --mp-* (D-1043); every value below
+     * prefers them and keeps this document's own palette as the fallback for
+     * an older host. The host owns the theme, so there is no second copy.
+     */
+    --bg: var(--mp-surface-solid, #f6f2ea);
+    --panel: var(--mp-surface-raised, #fbf8f2);
+    --ink: var(--mp-ink, #241f19);
+    --muted: var(--mp-ink-soft, #776b5c);
+    --line: var(--mp-line, rgba(60, 45, 25, 0.16));
+    --line-strong: var(--mp-line-strong, rgba(60, 45, 25, 0.3));
+    --accent: var(--mp-accent, #9a5427);
+    --accent-ink: var(--mp-accent-ink, #fff8ef);
+    --success: var(--mp-success, #2f7d4f);
+    --danger: var(--mp-danger, #a53a2a);
+    --focus: color-mix(in srgb, var(--mp-accent, #9a5427) 40%, transparent);
+    --body: var(--mp-font-body, -apple-system, "PingFang SC", "Hiragino Sans GB", "Helvetica Neue", sans-serif);
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+
+    /*
+     * Corner system (host D-1099): one ladder owns every box on this page.
+     * --radius-sm for controls and badges, --radius-md for certificate cards,
+     * --radius-lg for the outer surfaces.
+     */
+    --radius-xs: 4px;
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 14px;
+    --radius-pill: 999px;
+  }
+  :root[data-scheme="dark"] {
+    color-scheme: dark;
+    --bg: var(--mp-surface-solid, #171412);
+    --panel: var(--mp-surface-raised, #201c18);
+    --ink: var(--mp-ink, #f0e6d9);
+    --muted: var(--mp-ink-soft, #9a8c7b);
+    --line: var(--mp-line, rgba(255, 236, 214, 0.14));
+    --line-strong: var(--mp-line-strong, rgba(255, 236, 214, 0.26));
+    --accent: var(--mp-accent, #d68a52);
+    --accent-ink: var(--mp-accent-ink, #241505);
+    --success: var(--mp-success, #74b98d);
+    --danger: var(--mp-danger, #e08a76);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg);
+    color: var(--ink);
+    font: 12.5px/1.55 var(--body);
+    -webkit-font-smoothing: antialiased;
+  }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  :focus-visible { outline: none; }
+
+  .doc-head {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 40px;
+    padding: 0 12px;
+    border-bottom: 1px solid var(--line);
+  }
+  .doc-icon { width: 16px; height: 16px; flex: none; color: var(--accent); }
+  .doc-title { font-size: 12.5px; font-weight: 650; letter-spacing: 0.02em; }
+  .doc-close {
+    margin-left: auto;
+    width: 26px;
+    height: 26px;
+    display: grid;
+    place-items: center;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--muted);
+  }
+  .doc-close:hover { color: var(--ink); border-color: var(--line); background: var(--panel); }
+  .doc-close:focus-visible { box-shadow: inset 0 0 0 1px var(--focus); }
+  .doc-close svg { width: 14px; height: 14px; }
+
+  .inspect {
+    flex: none;
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--line);
+  }
+  .field { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+  .field-label {
+    font-size: 10px;
+    font-weight: 650;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  #address {
+    width: 100%;
+    height: 30px;
+    padding: 0 9px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: var(--panel);
+    color: var(--ink);
+    font: 12.5px/1 var(--mono);
+  }
+  #address::placeholder { color: var(--muted); opacity: 0.7; }
+  #address:focus { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--focus); outline: none; }
+  #run {
+    flex: none;
+    height: 30px;
+    padding: 0 14px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    background: var(--accent);
+    color: var(--accent-ink);
+    font-weight: 600;
+  }
+  #run:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 86%, var(--ink)); }
+  #run:focus-visible { box-shadow: inset 0 0 0 1px var(--focus); }
+  #run:disabled { opacity: 0.62; cursor: default; }
+
+  .status {
+    flex: none;
+    margin: 0;
+    padding: 8px 12px;
+    color: var(--muted);
+    font-size: 11.5px;
+    border-bottom: 1px solid var(--line);
+  }
+  .status[data-tone="error"] { color: var(--danger); }
+
+  .error {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 10px 12px 0;
+    padding: 9px 11px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--danger) 8%, var(--panel));
+  }
+  .error[hidden] { display: none; }
+  .error-message { flex: 1; margin: 0; color: var(--danger); font-size: 11.5px; overflow-wrap: anywhere; }
+  .quiet {
+    flex: none;
+    height: 26px;
+    padding: 0 10px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--ink);
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .quiet:hover { background: var(--panel); }
+  .quiet:focus-visible { box-shadow: inset 0 0 0 1px var(--focus); }
+
+  .doc-scroll { flex: 1; min-height: 0; overflow: auto; padding: 12px; }
+  .doc-scroll > section[hidden] { display: none; }
+
+  /*
+   * Status reads as tiles (D-1128): label above value, right angles, and one
+   * hairline grid between them. A tile is not a card and takes no radius.
+   */
+  .tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+    border-top: 1px solid var(--line-strong);
+    border-left: 1px solid var(--line-strong);
+  }
+  .tile {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 10px 9px;
+    border-right: 1px solid var(--line-strong);
+    border-bottom: 1px solid var(--line-strong);
+    min-width: 0;
+  }
+  .tile-label {
+    font-size: 9.5px;
+    font-weight: 650;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .tile-value {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    font-size: 14px;
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+  }
+  .tile-value[data-tone="success"] { color: var(--success); }
+  .tile-value[data-tone="redirect"] { color: var(--accent); }
+  .tile-value[data-tone="error"] { color: var(--danger); }
+  .tile-note { color: var(--muted); font-size: 10.5px; font-weight: 500; }
+  .tile-value.is-text { font-size: 12px; font-weight: 600; }
+
+  .url-line {
+    margin: 9px 1px 0;
+    color: var(--muted);
+    font: 11px/1.5 var(--mono);
+    overflow-wrap: anywhere;
+  }
+  .url-line[hidden] { display: none; }
+  .url-line b { color: var(--ink); font-weight: 600; }
+
+  .group { margin-top: 16px; }
+  .group[hidden] { display: none; }
+  .group-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--line-strong);
+  }
+  .group-head h2 {
+    margin: 0;
+    font-size: 10.5px;
+    font-weight: 650;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .count { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .group-head .badge { margin-left: auto; }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 21px;
+    padding: 0 8px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-sm);
+    background: var(--panel);
+    color: var(--muted);
+    font-size: 10.5px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .badge::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+  .badge[data-tone="success"] { color: var(--success); }
+  .badge[data-tone="error"] { color: var(--danger); }
+  .badge[data-tone="pending"] { color: var(--accent); }
+
+  .facts {
+    margin: 8px 0 0;
+    color: var(--muted);
+    font: 11px/1.6 var(--mono);
+    overflow-wrap: anywhere;
+  }
+  .facts b { color: var(--ink); font-weight: 600; }
+
+  .notice {
+    margin: 9px 0 0;
+    padding: 8px 10px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--danger) 8%, var(--panel));
+    color: var(--danger);
+    font-size: 11.5px;
+    overflow-wrap: anywhere;
+  }
+  .notice[hidden] { display: none; }
+
+  .chain { display: flex; flex-direction: column; gap: 8px; margin-top: 9px; }
+  .cert {
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: var(--panel);
+    padding: 10px 12px;
+  }
+  .cert-head { display: flex; align-items: flex-start; gap: 9px; }
+  .cert-index {
+    flex: none;
+    width: 18px;
+    height: 18px;
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-xs);
+    color: var(--muted);
+    font: 600 10px/1 var(--mono);
+    margin-top: 1px;
+  }
+  .cert-name { flex: 1; min-width: 0; }
+  .cert-cn { display: block; font-size: 12.5px; font-weight: 650; overflow-wrap: anywhere; }
+  .cert-role { color: var(--muted); font-size: 10.5px; font-weight: 500; margin-left: 6px; }
+  .cert-dn { display: block; color: var(--muted); font: 10.5px/1.5 var(--mono); overflow-wrap: anywhere; }
+  .cert .badge { flex: none; }
+
+  .cert-facts {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 7px 16px;
+    margin: 9px 0 0;
+    padding-top: 9px;
+    border-top: 1px solid var(--line);
+  }
+  .cert-facts div { min-width: 0; }
+  .cert-facts dt {
+    font-size: 9.5px;
+    font-weight: 650;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .cert-facts dd {
+    margin: 1px 0 0;
+    font: 11px/1.5 var(--mono);
+    overflow-wrap: anywhere;
+  }
+  .cert-san { display: flex; flex-wrap: wrap; gap: 4px; margin: 9px 0 0; }
+  .chip {
+    padding: 1px 6px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    font: 10px/1.6 var(--mono);
+    color: var(--muted);
+  }
+  .san-label {
+    font-size: 9.5px;
+    font-weight: 650;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 2px 2px 0 0;
+  }
+  .fingerprint {
+    display: flex;
+    gap: 8px;
+    margin: 9px 0 0;
+    padding-top: 8px;
+    border-top: 1px solid var(--line);
+    font: 10px/1.5 var(--mono);
+    color: var(--muted);
+    overflow-wrap: anywhere;
+  }
+  .fingerprint span { flex: none; font-weight: 650; letter-spacing: 0.08em; }
+
+  /*
+   * A table is a table (D-1116): hairline rows, right angles, no card around
+   * it. Only the values are monospaced; labels stay in the body face.
+   */
+  table.grid { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  table.grid th {
+    padding: 6px 8px;
+    text-align: left;
+    font-size: 9.5px;
+    font-weight: 650;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border-bottom: 1px solid var(--line-strong);
+  }
+  table.grid td {
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+    font: 11px/1.5 var(--mono);
+    overflow-wrap: anywhere;
+  }
+  table.grid tr:last-child td { border-bottom: 0; }
+  table.grid .name { width: 34%; color: var(--muted); }
+  table.grid .hop { width: 62px; font-variant-numeric: tabular-nums; }
+  table.grid .empty { color: var(--muted); font-family: var(--body); }
+
+  .actions {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 8px 12px;
+    border-top: 1px solid var(--line);
+  }
+  #copy {
+    height: 27px;
+    padding: 0 11px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--ink);
+    font-size: 11px;
+    font-weight: 600;
+  }
+  #copy:hover:not(:disabled) { background: var(--panel); }
+  #copy:focus-visible { box-shadow: inset 0 0 0 1px var(--focus); }
+  #copy:disabled { opacity: 0.5; cursor: default; }
+  .hint { margin-left: auto; color: var(--muted); font-size: 10.5px; }
+
+  @media (max-width: 460px) {
+    .cert-facts { grid-template-columns: minmax(0, 1fr); }
+    .hint { display: none; }
+  }
+</style>
+</head>
+<body>
+  <header class="doc-head">
+    <svg class="doc-icon" viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M8 1.5l5 2v4.2c0 3-2 5.6-5 6.8-3-1.2-5-3.8-5-6.8V3.5z"
+            fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/>
+      <path d="M5.7 8l1.6 1.6 3.1-3.2" fill="none" stroke="currentColor"
+            stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <span class="doc-title">响应头与证书</span>
+    <button id="doc-close" class="doc-close" type="button" aria-label="关闭">
+      <svg viewBox="0 0 16 16" aria-hidden="true">
+        <path d="M4 4l8 8M12 4l-8 8" fill="none" stroke="currentColor"
+              stroke-width="1.4" stroke-linecap="round"/>
+      </svg>
+    </button>
+  </header>
+
+  <form id="inspect-form" class="inspect" novalidate>
+    <div class="field">
+      <label class="field-label" for="address">地址</label>
+      <input id="address" type="text" inputmode="url" autocomplete="off" spellcheck="false"
+             placeholder="example.com" maxlength="2048">
+    </div>
+    <button id="run" type="submit">检查</button>
+  </form>
+
+  <p id="status" class="status" role="status" data-tone="info">打开一条链接，或输入地址后按回车。</p>
+
+  <div id="error" class="error" hidden>
+    <p id="error-message" class="error-message"></p>
+    <button id="retry" class="quiet" type="button">重试</button>
+  </div>
+
+  <main class="doc-scroll">
+    <section id="result" hidden>
+      <div class="tiles" aria-label="检查摘要">
+        <div class="tile">
+          <span class="tile-label">状态</span>
+          <span id="status-code" class="tile-value"><span id="status-number">—</span><span id="status-verdict" class="tile-note"></span></span>
+        </div>
+        <div class="tile">
+          <span class="tile-label">协议</span>
+          <span id="proto" class="tile-value is-text">—</span>
+        </div>
+        <div class="tile">
+          <span class="tile-label">耗时</span>
+          <span id="duration" class="tile-value">—</span>
+        </div>
+        <div class="tile">
+          <span class="tile-label">响应头</span>
+          <span id="header-total" class="tile-value">—</span>
+        </div>
+        <div class="tile">
+          <span class="tile-label">重定向</span>
+          <span id="redirect-total" class="tile-value">—</span>
+        </div>
+        <div class="tile">
+          <span class="tile-label">TLS</span>
+          <span id="tls-version" class="tile-value is-text">—</span>
+        </div>
+      </div>
+
+      <p id="final-url" class="url-line" hidden></p>
+
+      <section id="redirect-group" class="group" hidden>
+        <div class="group-head">
+          <h2>重定向</h2>
+          <span id="redirect-count" class="count">0 跳</span>
+        </div>
+        <table class="grid">
+          <thead>
+            <tr><th class="hop">状态</th><th>从</th><th>到</th></tr>
+          </thead>
+          <tbody id="redirects"></tbody>
+        </table>
+      </section>
+
+      <section id="tls-group" class="group">
+        <div class="group-head">
+          <h2>TLS 与证书</h2>
+          <span id="tls-badge" class="badge">—</span>
+        </div>
+        <p id="tls-facts" class="facts"></p>
+        <p id="verify-error" class="notice" hidden></p>
+        <div id="chain" class="chain"></div>
+      </section>
+
+      <section class="group">
+        <div class="group-head">
+          <h2>响应头</h2>
+          <span id="headers-count" class="count">0 条</span>
+        </div>
+        <table class="grid">
+          <thead>
+            <tr><th class="name">名称</th><th>值</th></tr>
+          </thead>
+          <tbody id="headers"></tbody>
+        </table>
+      </section>
+    </section>
+  </main>
+
+  <footer class="actions">
+    <button id="copy" type="button" disabled>复制报告</button>
+    <span class="hint">回车检查 · Esc 关闭</span>
+  </footer>
+
+<script>
+<!--bundle-->
+</script>
+</body>
+</html>
