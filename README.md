@@ -1,6 +1,6 @@
 # 响应头与证书
 
-MyPaste extension `com.mypaste.response-inspector` (version `1.0.0`).
+MyPaste extension `com.mypaste.response-inspector` (version `1.0.1`).
 
 打开一条链接就查看它实际返回的响应：状态行、完整响应头、重定向链，以及 TLS 版本、密码套件和整条证书链的颁发者、有效期、SAN、公钥与 SHA-256 指纹。证书验证失败也照常列出细节，并明确标出失败原因。检查只经宿主的 `network.inspect` 服务发出一次 HTTPS GET：不读正文、不发送 Cookie、不连接本机或内网地址，也不打开任何套接字。
 
