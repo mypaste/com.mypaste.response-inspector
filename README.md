@@ -1,8 +1,8 @@
 # 响应头与证书
 
-MyPaste extension `com.mypaste.response-inspector` (version `1.0.1`).
+MyPaste extension `com.mypaste.response-inspector` (version `1.0.2`).
 
-打开一条链接就查看它实际返回的响应：状态行、完整响应头、重定向链，以及 TLS 版本、密码套件和整条证书链的颁发者、有效期、SAN、公钥与 SHA-256 指纹。证书验证失败也照常列出细节，并明确标出失败原因。检查只经宿主的 `network.inspect` 服务发出一次 HTTPS GET：不读正文、不发送 Cookie、不连接本机或内网地址，也不打开任何套接字。
+打开一条链接就查看它实际返回的响应：状态行、完整响应头、重定向链，以及 TLS 版本、密码套件和整条证书链的颁发者、有效期、SAN、公钥与 SHA-256 指纹。证书验证失败也照常列出细节，并明确标出失败原因。检查只经宿主的 `network.inspect` 服务发出一次 HTTPS GET：不读正文、不发送 Cookie；公网、本机与内网地址都可以检查（保留段、组播与云元数据地址除外），本扩展自己也不打开任何套接字。
 
 This repository is an independent copy extracted from the former `mypaste-code-extensions` monorepo at commit `b31981cd4baf3c300c7634ef26be118cc0074094`. It contains only this extension's tracked source files. The published `.mypaste-plugin` archives and marketplace index live in [`mypaste-extensions-catalog`](https://github.com/mypaste/mypaste-extensions-catalog).
 

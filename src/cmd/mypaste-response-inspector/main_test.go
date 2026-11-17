@@ -95,12 +95,12 @@ func TestRunInspectsThroughTheHost(t *testing.T) {
 
 func TestRunReportsTheHostRefusal(t *testing.T) {
 	reply, _ := pipeRun(t, invocationLine("inspect", "http://example.com/a"), func(call hostCall) string {
-		return `{"type":"hostCallResult","id":"` + call.ID + `","ok":false,"error":"目标地址不是公网地址，不能检查"}`
+		return `{"type":"hostCallResult","id":"` + call.ID + `","ok":false,"error":"这个地址不能作为检查对象（保留段、组播或云元数据地址）"}`
 	})
 	if reply.OK || reply.Error == nil {
 		t.Fatalf("reply = %#v", reply)
 	}
-	if reply.Error.Message != "目标地址不是公网地址，不能检查" {
+	if reply.Error.Message != "这个地址不能作为检查对象（保留段、组播或云元数据地址）" {
 		t.Fatalf("message = %q", reply.Error.Message)
 	}
 }
